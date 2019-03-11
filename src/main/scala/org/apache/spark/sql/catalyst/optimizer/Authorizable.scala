@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.io.File
-
 import com.githup.yaooqinn.spark.authorizer.Logging
 import org.apache.hadoop.hive.ql.plan.HiveOperation
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveAuthzContext, HiveOperationType}
@@ -27,11 +25,8 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, InsertIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.hive.{HiveExternalCatalog, PrivilegesBuilder}
 import org.apache.spark.sql.hive.client.AuthzImpl
-import org.apache.spark.sql.hive.execution.CreateHiveTableAsSelectCommand
-import org.apache.spark.util.Utils
 
 trait Authorizable extends Rule[LogicalPlan] with Logging {
 
@@ -60,37 +55,37 @@ trait Authorizable extends Rule[LogicalPlan] with Logging {
     plan
   }
 
-  def policyCacheDir: Option[String] = {
-    Option(spark.sparkContext.hadoopConfiguration.get("ranger.plugin.hive.policy.cache.dir"))
-  }
-
-
-  def createCacheDirIfNonExists(dir: String): Unit = {
-    val file = new File(dir)
-    if (!file.exists()) {
-      if (file.mkdirs()) {
-        info("Creating ranger policy cache directory at " + file.getAbsolutePath)
-        file.deleteOnExit()
-      } else {
-        warn("Unable to create ranger policy cache directory at " + file.getAbsolutePath)
-      }
-    }
-  }
-
-  policyCacheDir match {
-    case Some(dir) => createCacheDirIfNonExists(dir)
-    case _ =>
-      // load resources from ranger configuration files
-      Option(Utils.getContextOrSparkClassLoader.getResource("ranger-hive-security.xml")) match {
-        case Some(url) =>
-          spark.sparkContext.hadoopConfiguration.addResource(url)
-          policyCacheDir match {
-            case Some(dir) => createCacheDirIfNonExists(dir)
-            case _ =>
-          }
-        case _ =>
-      }
-  }
+//  def policyCacheDir: Option[String] = {
+//    Option(spark.sparkContext.hadoopConfiguration.get("ranger.plugin.hive.policy.cache.dir"))
+//  }
+//
+//
+//  def createCacheDirIfNonExists(dir: String): Unit = {
+//    val file = new File(dir)
+//    if (!file.exists()) {
+//      if (file.mkdirs()) {
+//        info("Creating ranger policy cache directory at " + file.getAbsolutePath)
+//        file.deleteOnExit()
+//      } else {
+//        warn("Unable to create ranger policy cache directory at " + file.getAbsolutePath)
+//      }
+//    }
+//  }
+//
+//  policyCacheDir match {
+//    case Some(dir) => createCacheDirIfNonExists(dir)
+//    case _ =>
+//      // load resources from ranger configuration files
+//      Option(Utils.getContextOrSparkClassLoader.getResource("ranger-hive-security.xml")) match {
+//        case Some(url) =>
+//          spark.sparkContext.hadoopConfiguration.addResource(url)
+//          policyCacheDir match {
+//            case Some(dir) => createCacheDirIfNonExists(dir)
+//            case _ =>
+//          }
+//        case _ =>
+//      }
+//  }
 
   /**
    * Mapping of [[LogicalPlan]] -> [[HiveOperation]]
@@ -99,80 +94,87 @@ trait Authorizable extends Rule[LogicalPlan] with Logging {
    */
   def getHiveOperation(plan: LogicalPlan): HiveOperation = {
     plan match {
-      case c: Command => c match {
-        case _: AlterDatabasePropertiesCommand => HiveOperation.ALTERDATABASE
-        case p if p.nodeName == "AlterTableAddColumnsCommand" => HiveOperation.ALTERTABLE_ADDCOLS
-        case _: AlterTableAddPartitionCommand => HiveOperation.ALTERTABLE_ADDPARTS
-        case p if p.nodeName == "AlterTableChangeColumnCommand" =>
-          HiveOperation.ALTERTABLE_RENAMECOL
-        case _: AlterTableDropPartitionCommand => HiveOperation.ALTERTABLE_DROPPARTS
-        case _: AlterTableRecoverPartitionsCommand => HiveOperation.MSCK
-        case _: AlterTableRenamePartitionCommand => HiveOperation.ALTERTABLE_RENAMEPART
-        case a: AlterTableRenameCommand =>
-          if (!a.isView) HiveOperation.ALTERTABLE_RENAME else HiveOperation.ALTERVIEW_RENAME
-        case _: AlterTableSetPropertiesCommand
-             | _: AlterTableUnsetPropertiesCommand => HiveOperation.ALTERTABLE_PROPERTIES
-        case _: AlterTableSerDePropertiesCommand => HiveOperation.ALTERTABLE_SERDEPROPERTIES
-        case _: AlterTableSetLocationCommand => HiveOperation.ALTERTABLE_LOCATION
-        case _: AlterViewAsCommand => HiveOperation.QUERY
+      case c: Command => c.nodeName.replaceAll("XSQL", "") match {
+        case "AlterDatabasePropertiesCommand" => HiveOperation.ALTERDATABASE
+        case "AlterTableAddColumnsCommand" => HiveOperation.ALTERTABLE_ADDCOLS
+        case "AlterTableAddPartitionCommand" => HiveOperation.ALTERTABLE_ADDPARTS
+        case "AlterTableChangeColumnCommand" => HiveOperation.ALTERTABLE_RENAMECOL
+        case "AlterTableDropPartitionCommand" => HiveOperation.ALTERTABLE_DROPPARTS
+        case "AlterTableRecoverPartitionsCommand" => HiveOperation.MSCK
+        case "AlterTableRenamePartitionCommand" => HiveOperation.ALTERTABLE_RENAMEPART
+        case "AlterTableRenameCommand" =>
+          if (!c.asInstanceOf[AlterTableRenameCommand].isView) {
+            HiveOperation.ALTERTABLE_RENAME
+          } else {
+            HiveOperation.ALTERVIEW_RENAME
+          }
+        case "AlterTableSetPropertiesCommand"
+             | "AlterTableUnsetPropertiesCommand" => HiveOperation.ALTERTABLE_PROPERTIES
+        case "AlterTableSerDePropertiesCommand" => HiveOperation.ALTERTABLE_SERDEPROPERTIES
+        case "AlterTableSetLocationCommand" => HiveOperation.ALTERTABLE_LOCATION
+        case "AlterViewAsCommand" => HiveOperation.QUERY
         // case _: AlterViewAsCommand => HiveOperation.ALTERVIEW_AS
 
-        case _: AnalyzeColumnCommand => HiveOperation.QUERY
+        case "AnalyzeColumnCommand" => HiveOperation.QUERY
         // case _: AnalyzeTableCommand => HiveOperation.ANALYZE_TABLE
         // Hive treat AnalyzeTableCommand as QUERY, obey it.
-        case _: AnalyzeTableCommand => HiveOperation.QUERY
-        case p if p.nodeName == "AnalyzePartitionCommand" => HiveOperation.QUERY
+        case "AnalyzeTableCommand" => HiveOperation.QUERY
+        case "AnalyzePartitionCommand" => HiveOperation.QUERY
 
-        case _: CreateDatabaseCommand => HiveOperation.CREATEDATABASE
-        case _: CreateDataSourceTableAsSelectCommand
-             | _: CreateHiveTableAsSelectCommand => HiveOperation.CREATETABLE_AS_SELECT
-        case _: CreateFunctionCommand => HiveOperation.CREATEFUNCTION
-        case _: CreateTableCommand
-             | _: CreateDataSourceTableCommand => HiveOperation.CREATETABLE
-        case _: CreateTableLikeCommand => HiveOperation.CREATETABLE
-        case _: CreateViewCommand
-             | _: CacheTableCommand
-             | _: CreateTempViewUsing => HiveOperation.CREATEVIEW
+        case "CreateDatabaseCommand" => HiveOperation.CREATEDATABASE
+        case "CreateDataSourceTableAsSelectCommand"
+             | "CreateHiveTableAsSelectCommand" => HiveOperation.CREATETABLE_AS_SELECT
+        case "CreateFunctionCommand" => HiveOperation.CREATEFUNCTION
+        case "CreateTableCommand"
+             | "CreateDataSourceTableCommand" => HiveOperation.CREATETABLE
+        case "CreateTableLikeCommand" => HiveOperation.CREATETABLE
+        case "CreateViewCommand"
+             | "CacheTableCommand"
+             | "CreateTempViewUsing" => HiveOperation.CREATEVIEW
 
-        case p if p.nodeName == "DescribeColumnCommand" => HiveOperation.DESCTABLE
-        case _: DescribeDatabaseCommand => HiveOperation.DESCDATABASE
-        case _: DescribeFunctionCommand => HiveOperation.DESCFUNCTION
-        case _: DescribeTableCommand => HiveOperation.DESCTABLE
+        case "DescribeColumnCommand" => HiveOperation.DESCTABLE
+        case "DescribeDatabaseCommand" => HiveOperation.DESCDATABASE
+        case "DescribeFunctionCommand" => HiveOperation.DESCFUNCTION
+        case "DescribeTableCommand" => HiveOperation.DESCTABLE
 
-        case _: DropDatabaseCommand => HiveOperation.DROPDATABASE
+        case "DropDatabaseCommand" => HiveOperation.DROPDATABASE
         // Hive don't check privileges for `drop function command`, what about a unverified user
         // try to drop functions.
         // We treat permanent functions as tables for verifying.
-        case d: DropFunctionCommand if !d.isTemp => HiveOperation.DROPTABLE
-        case d: DropFunctionCommand if d.isTemp => HiveOperation.DROPFUNCTION
-        case _: DropTableCommand => HiveOperation.DROPTABLE
+        case "DropFunctionCommand" if !c.asInstanceOf[DropFunctionCommand].isTemp =>
+          HiveOperation.DROPTABLE
+        case "DropFunctionCommand" if c.asInstanceOf[DropFunctionCommand].isTemp =>
+          HiveOperation.DROPFUNCTION
+        case "DropTableCommand" => HiveOperation.DROPTABLE
 
-        case e: ExplainCommand => getHiveOperation(e.logicalPlan)
+        case "ExplainCommand" => getHiveOperation(c.asInstanceOf[ExplainCommand].logicalPlan)
 
-        case _: InsertIntoDataSourceCommand => HiveOperation.QUERY
-        case p if p.nodeName == "InsertIntoDataSourceDirCommand" => HiveOperation.QUERY
-        case _: InsertIntoHadoopFsRelationCommand => HiveOperation.CREATETABLE_AS_SELECT
-        case p if p.nodeName == "InsertIntoHiveDirCommand" => HiveOperation.QUERY
-        case p if p.nodeName == "InsertIntoHiveTable" => HiveOperation.QUERY
+        case "InsertIntoDataSourceCommand" => HiveOperation.QUERY
+        case "InsertIntoDataSourceDirCommand" => HiveOperation.QUERY
+        case "InsertIntoHadoopFsRelationCommand" => HiveOperation.CREATETABLE_AS_SELECT
+        case "InsertIntoHiveDirCommand" => HiveOperation.QUERY
+        case "InsertIntoHiveTable" => HiveOperation.QUERY
 
-        case _: LoadDataCommand => HiveOperation.LOAD
+        case "LoadDataCommand" => HiveOperation.LOAD
 
-        case p if p.nodeName == "SaveIntoDataSourceCommand" => HiveOperation.QUERY
-        case s: SetCommand if s.kv.isEmpty || s.kv.get._2.isEmpty => HiveOperation.SHOWCONF
-        case _: SetDatabaseCommand => HiveOperation.SWITCHDATABASE
-        case _: ShowCreateTableCommand => HiveOperation.SHOW_CREATETABLE
-        case _: ShowColumnsCommand => HiveOperation.SHOWCOLUMNS
-        case _: ShowDatabasesCommand => HiveOperation.SHOWDATABASES
-        case _: ShowFunctionsCommand => HiveOperation.SHOWFUNCTIONS
-        case _: ShowPartitionsCommand => HiveOperation.SHOWPARTITIONS
-        case _: ShowTablesCommand => HiveOperation.SHOWTABLES
-        case _: ShowTablePropertiesCommand => HiveOperation.SHOW_TBLPROPERTIES
-        case s: StreamingExplainCommand =>
-          getHiveOperation(s.queryExecution.optimizedPlan)
+        case "SaveIntoDataSourceCommand" => HiveOperation.QUERY
+        case "SetCommand" if c.asInstanceOf[SetCommand].kv.isEmpty
+          || c.asInstanceOf[SetCommand].kv.get._2.isEmpty =>
+          HiveOperation.SHOWCONF
+        case "SetDatabaseCommand" => HiveOperation.SWITCHDATABASE
+        case "ShowCreateTableCommand" => HiveOperation.SHOW_CREATETABLE
+        case "ShowColumnsCommand" => HiveOperation.SHOWCOLUMNS
+        case "ShowDatabasesCommand" => HiveOperation.SHOWDATABASES
+        case "ShowFunctionsCommand" => HiveOperation.SHOWFUNCTIONS
+        case "ShowPartitionsCommand" => HiveOperation.SHOWPARTITIONS
+        case "ShowTablesCommand" => HiveOperation.SHOWTABLES
+        case "ShowTablePropertiesCommand" => HiveOperation.SHOW_TBLPROPERTIES
+        case "StreamingExplainCommand" =>
+          getHiveOperation(c.asInstanceOf[StreamingExplainCommand].queryExecution.optimizedPlan)
 
-        case _: TruncateTableCommand => HiveOperation.TRUNCATETABLE
+        case "TruncateTableCommand" => HiveOperation.TRUNCATETABLE
 
-        case _: UncacheTableCommand => HiveOperation.DROPVIEW
+        case "UncacheTableCommand" => HiveOperation.DROPVIEW
 
         // Commands that do not need build privilege goes as explain type
         case _ =>

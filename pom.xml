@@ -51,10 +51,10 @@
         <scala.binary.version>2.11</scala.binary.version>
         <scalatest.version>2.2.6</scalatest.version>
         <spark.group>org.apache.spark</spark.group>
-        <spark.version>2.2.2</spark.version>
+        <spark.version>2.3.1.xsql-0.2.1-with-ae-acl</spark.version>
         <spark.scope>provided</spark.scope>
-        <hive.group>org.spark-project.hive</hive.group>
-        <hive.version>1.2.1.spark2</hive.version>
+        <hive.group>org.xitong-spark-project.hive</hive.group>
+        <hive.version>1.2.1U9.spark</hive.version>
         <java.version>1.7</java.version>
     </properties>
 
@@ -128,6 +128,13 @@
 
         <dependency>
             <groupId>${spark.group}</groupId>
+            <artifactId>spark-xsql_${scala.binary.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>${spark.scope}</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>${spark.group}</groupId>
             <artifactId>spark-hive_${scala.binary.version}</artifactId>
             <version>${spark.version}</version>
             <scope>${spark.scope}</scope>
@@ -143,6 +150,12 @@
             <artifactId>hive-exec</artifactId>
             <version>${hive.version}</version>
             <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+                    <groupId>org.apache.hadoop</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Dependencies For Suites -->

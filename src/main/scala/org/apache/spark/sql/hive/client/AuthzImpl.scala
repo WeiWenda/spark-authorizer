@@ -27,6 +27,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.{AuthzUtils, HiveExternalCatalog}
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
+import org.apache.spark.sql.xsql.XSQLExternalCatalog
 
 /**
  * A Tool for Authorizer implementation.
@@ -51,7 +52,7 @@ object AuthzImpl extends Logging {
       outputObjs: JList[HivePrivilegeObject],
       context: HiveAuthzContext): Unit = {
     val client = spark.sharedState
-      .externalCatalog.asInstanceOf[HiveExternalCatalog]
+      .externalCatalog.asInstanceOf[XSQLExternalCatalog]
       .client
     val clientImpl = try {
       client.asInstanceOf[HiveClientImpl]
@@ -65,7 +66,7 @@ object AuthzImpl extends Logging {
         clientLoader.cachedHive = null
         val newClient = clientLoader.createClient()
         AuthzUtils.setFieldVal(
-          spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
+          spark.sharedState.externalCatalog.asInstanceOf[XSQLExternalCatalog],
           "client",
           newClient)
         newClient.asInstanceOf[HiveClientImpl]
