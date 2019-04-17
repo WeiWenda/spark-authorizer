@@ -51,9 +51,13 @@ object AuthzImpl extends Logging {
       inputObjs: JList[HivePrivilegeObject],
       outputObjs: JList[HivePrivilegeObject],
       context: HiveAuthzContext): Unit = {
-    val client = spark.sharedState
-      .externalCatalog.asInstanceOf[XSQLExternalCatalog]
-      .client
+    val isXSQL = spark.sharedState.externalCatalog.isInstanceOf[XSQLExternalCatalog]
+    val externalCatalog = if (isXSQL) {
+      spark.sharedState.externalCatalog.asInstanceOf[XSQLExternalCatalog]
+    } else {
+      spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
+    }
+    val client = externalCatalog.client
     val clientImpl = try {
       client.asInstanceOf[HiveClientImpl]
     } catch {
@@ -66,7 +70,7 @@ object AuthzImpl extends Logging {
         clientLoader.cachedHive = null
         val newClient = clientLoader.createClient()
         AuthzUtils.setFieldVal(
-          spark.sharedState.externalCatalog.asInstanceOf[XSQLExternalCatalog],
+          externalCatalog,
           "client",
           newClient)
         newClient.asInstanceOf[HiveClientImpl]
