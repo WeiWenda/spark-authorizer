@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.AuthzUtils._
 import org.apache.spark.sql.hive.execution.CreateHiveTableAsSelectCommand
 import org.apache.spark.sql.types.StructField
+import org.apache.spark.sql.xsql.execution.command._
 
 /**
  * [[LogicalPlan]] -> list of [[HivePrivilegeObject]]s
@@ -144,8 +145,9 @@ private[sql] object PrivilegesBuilder {
       outputObjs: JList[HPO]): Unit = {
     plan match {
       case a: AlterDatabasePropertiesCommand => addDbLevelObjs(a.databaseName, outputObjs)
+      case a: XSQLAlterDatabasePropertiesCommand => addDbLevelObjs(a.databaseName, outputObjs)
 
-      case a if a.nodeName == "AlterTableAddColumnsCommand" =>
+      case a if a.nodeName.replaceAll("XSQL", "").equals("AlterTableAddColumnsCommand") =>
         addTableOrViewLevelObjs(
           getFieldVal(a, "table").asInstanceOf[TableIdentifier],
           inputObjs,
@@ -159,7 +161,7 @@ private[sql] object PrivilegesBuilder {
         addTableOrViewLevelObjs(a.tableName, inputObjs)
         addTableOrViewLevelObjs(a.tableName, outputObjs)
 
-      case a if a.nodeName == "AlterTableChangeColumnCommand" =>
+      case a if a.nodeName.replaceAll("XSQL", "").equals("AlterTableChangeColumnCommand") =>
         addTableOrViewLevelObjs(
           getFieldVal(a, "tableName").asInstanceOf[TableIdentifier],
           inputObjs,
@@ -185,6 +187,9 @@ private[sql] object PrivilegesBuilder {
       case a: AlterTableSerDePropertiesCommand =>
         addTableOrViewLevelObjs(a.tableName, inputObjs)
         addTableOrViewLevelObjs(a.tableName, outputObjs)
+      case a: XSQLAlterTableSerDePropertiesCommand =>
+        addTableOrViewLevelObjs(a.tableName, inputObjs)
+        addTableOrViewLevelObjs(a.tableName, outputObjs)
 
       case a: AlterTableSetLocationCommand =>
         addTableOrViewLevelObjs(a.tableName, inputObjs)
@@ -193,8 +198,14 @@ private[sql] object PrivilegesBuilder {
       case a: AlterTableSetPropertiesCommand =>
         addTableOrViewLevelObjs(a.tableName, inputObjs)
         addTableOrViewLevelObjs(a.tableName, outputObjs)
+      case a: XSQLAlterTableSetPropertiesCommand =>
+        addTableOrViewLevelObjs(a.tableName, inputObjs)
+        addTableOrViewLevelObjs(a.tableName, outputObjs)
 
       case a: AlterTableUnsetPropertiesCommand =>
+        addTableOrViewLevelObjs(a.tableName, inputObjs)
+        addTableOrViewLevelObjs(a.tableName, outputObjs)
+      case a: XSQLAlterTableUnsetPropertiesCommand =>
         addTableOrViewLevelObjs(a.tableName, inputObjs)
         addTableOrViewLevelObjs(a.tableName, outputObjs)
 
@@ -210,8 +221,13 @@ private[sql] object PrivilegesBuilder {
           a.tableIdent, inputObjs, columns = a.columnNames)
         addTableOrViewLevelObjs(
           a.tableIdent, outputObjs, columns = a.columnNames)
+      case a: XSQLAnalyzeColumnCommand =>
+        addTableOrViewLevelObjs(
+          a.tableIdent, inputObjs, columns = a.columnNames)
+        addTableOrViewLevelObjs(
+          a.tableIdent, outputObjs, columns = a.columnNames)
 
-      case a if a.nodeName == "AnalyzePartitionCommand" =>
+      case a if a.nodeName.replaceAll("XSQL", "").equals("AnalyzePartitionCommand") =>
         addTableOrViewLevelObjs(
           getFieldVal(a, "tableIdent").asInstanceOf[TableIdentifier], inputObjs)
         addTableOrViewLevelObjs(
@@ -220,26 +236,43 @@ private[sql] object PrivilegesBuilder {
       case a: AnalyzeTableCommand =>
         addTableOrViewLevelObjs(a.tableIdent, inputObjs, columns = Seq("RAW__DATA__SIZE"))
         addTableOrViewLevelObjs(a.tableIdent, outputObjs)
+      case a: XSQLAnalyzeTableCommand =>
+        addTableOrViewLevelObjs(a.tableIdent, inputObjs, columns = Seq("RAW__DATA__SIZE"))
+        addTableOrViewLevelObjs(a.tableIdent, outputObjs)
 
       case c: CacheTableCommand => c.plan.foreach {
         buildQuery(_, inputObjs)
       }
 
       case c: CreateDatabaseCommand => addDbLevelObjs(c.databaseName, outputObjs)
+      case c: XSQLCreateDatabaseCommand => addDbLevelObjs(c.databaseName, outputObjs)
 
       case c: CreateDataSourceTableAsSelectCommand =>
+        addDbLevelObjs(c.table.identifier, outputObjs)
+        addTableOrViewLevelObjs(c.table.identifier, outputObjs, mode = c.mode)
+        buildQuery(c.query, inputObjs)
+      case c: XSQLCreateDataSourceTableAsSelectCommand =>
         addDbLevelObjs(c.table.identifier, outputObjs)
         addTableOrViewLevelObjs(c.table.identifier, outputObjs, mode = c.mode)
         buildQuery(c.query, inputObjs)
 
       case c: CreateDataSourceTableCommand =>
         addTableOrViewLevelObjs(c.table.identifier, outputObjs)
+      case c: XSQLCreateDataSourceTableCommand =>
+        addTableOrViewLevelObjs(c.table.identifier, outputObjs)
 
       case c: CreateFunctionCommand if !c.isTemp =>
         addDbLevelObjs(c.databaseName, outputObjs)
         addFunctionLevelObjs(c.databaseName, c.functionName, outputObjs)
+      case c: XSQLCreateFunctionCommand if !c.isTemp =>
+        addDbLevelObjs(c.databaseName, outputObjs)
+        addFunctionLevelObjs(c.databaseName, c.functionName, outputObjs)
 
       case c: CreateHiveTableAsSelectCommand =>
+        addDbLevelObjs(c.tableDesc.identifier, outputObjs)
+        addTableOrViewLevelObjs(c.tableDesc.identifier, outputObjs)
+        buildQuery(c.query, inputObjs)
+      case c: XSQLCreateHiveTableAsSelectCommand =>
         addDbLevelObjs(c.tableDesc.identifier, outputObjs)
         addTableOrViewLevelObjs(c.tableDesc.identifier, outputObjs)
         buildQuery(c.query, inputObjs)
@@ -272,19 +305,29 @@ private[sql] object PrivilegesBuilder {
 
       case d: DescribeDatabaseCommand =>
         addDbLevelObjs(d.databaseName, inputObjs)
+      case d: XSQLDescribeDatabaseCommand =>
+        addDbLevelObjs(d.databaseName, inputObjs)
 
       case d: DescribeFunctionCommand =>
         addFunctionLevelObjs(d.functionName.database, d.functionName.funcName, inputObjs)
 
       case d: DescribeTableCommand => addTableOrViewLevelObjs(d.table, inputObjs)
+      case d: XSQLDescribeTableCommand => addTableOrViewLevelObjs(d.table, inputObjs)
 
       case d: DropDatabaseCommand =>
         // outputObjs are enough for privilege check, adding inputObjs for consistency with hive
         // behaviour in case of some unexpected issues.
         addDbLevelObjs(d.databaseName, inputObjs)
         addDbLevelObjs(d.databaseName, outputObjs)
+      case d: XSQLDropDatabaseCommand =>
+        // outputObjs are enough for privilege check, adding inputObjs for consistency with hive
+        // behaviour in case of some unexpected issues.
+        addDbLevelObjs(d.databaseName, inputObjs)
+        addDbLevelObjs(d.databaseName, outputObjs)
 
       case d: DropFunctionCommand =>
+        addFunctionLevelObjs(d.databaseName, d.functionName, outputObjs)
+      case d: XSQLDropFunctionCommand =>
         addFunctionLevelObjs(d.databaseName, d.functionName, outputObjs)
 
       case d: DropTableCommand => addTableOrViewLevelObjs(d.tableName, outputObjs)
@@ -318,7 +361,7 @@ private[sql] object PrivilegesBuilder {
       case i if i.nodeName == "InsertIntoHiveDirCommand" =>
         buildQuery(getFieldVal(i, "query").asInstanceOf[LogicalPlan], inputObjs)
 
-      case i if i.nodeName == "InsertIntoHiveTable" =>
+      case i if i.nodeName.replaceAll("XSQL", "").equals("InsertIntoHiveTable") =>
         addTableOrViewLevelObjs(
           getFieldVal(i, "table").asInstanceOf[CatalogTable].identifier, outputObjs)
         buildQuery(getFieldVal(i, "query").asInstanceOf[LogicalPlan], inputObjs)
@@ -329,20 +372,26 @@ private[sql] object PrivilegesBuilder {
         buildQuery(getFieldVal(s, "query").asInstanceOf[LogicalPlan], outputObjs)
 
       case s: SetDatabaseCommand => addDbLevelObjs(s.databaseName, inputObjs)
+      case s: XSQLSetDatabaseCommand => addDbLevelObjs(s.databaseName, inputObjs)
 
       case s: ShowColumnsCommand => addTableOrViewLevelObjs(s.tableName, inputObjs)
+      case s: XSQLShowColumnsCommand => addTableOrViewLevelObjs(s.tableName, inputObjs)
 
       case s: ShowCreateTableCommand => addTableOrViewLevelObjs(s.table, inputObjs)
 
       case s: ShowFunctionsCommand => s.db.foreach(addDbLevelObjs(_, inputObjs))
+      case s: XSQLShowFunctionsCommand => s.db.foreach(addDbLevelObjs(_, inputObjs))
 
       case s: ShowPartitionsCommand => addTableOrViewLevelObjs(s.tableName, inputObjs)
+      case s: XSQLShowPartitionsCommand => addTableOrViewLevelObjs(s.tableName, inputObjs)
 
       case s: ShowTablePropertiesCommand => addTableOrViewLevelObjs(s.table, inputObjs)
 
       case s: ShowTablesCommand => addDbLevelObjs(s.databaseName, inputObjs)
+      case s: XSQLShowTablesCommand => addDbLevelObjs(s.databaseName, inputObjs)
 
       case s: TruncateTableCommand => addTableOrViewLevelObjs(s.tableName, outputObjs)
+      case s: XSQLTruncateTableCommand => addTableOrViewLevelObjs(s.tableName, outputObjs)
 
       case _ =>
       // AddFileCommand
