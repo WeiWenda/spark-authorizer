@@ -51,7 +51,7 @@
         <scala.binary.version>2.11</scala.binary.version>
         <scalatest.version>2.2.6</scalatest.version>
         <spark.group>org.apache.spark</spark.group>
-        <spark.version>2.3.1.xsql-0.2.1-with-ae-acl</spark.version>
+        <spark.version>2.3.1.xsql-0.3.2-with-ae-acl</spark.version>
         <spark.scope>provided</spark.scope>
         <hive.group>org.xitong-spark-project.hive</hive.group>
         <hive.version>1.2.1U9.spark</hive.version>

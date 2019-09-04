@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.util.{Failure, Success, Try}
 
-private[hive] object AuthzUtils {
+private[sql] object AuthzUtils {
 
   def getFieldVal(o: Any, name: String): Any = {
     Try {

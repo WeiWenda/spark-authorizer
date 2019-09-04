@@ -25,7 +25,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.hive.{HiveExternalCatalog, PrivilegesBuilder}
+import org.apache.spark.sql.hive.{AuthzUtils, HiveExternalCatalog, PrivilegesBuilder}
 import org.apache.spark.sql.hive.client.AuthzImpl
 
 trait Authorizable extends Rule[LogicalPlan] with Logging {
@@ -141,9 +141,11 @@ trait Authorizable extends Rule[LogicalPlan] with Logging {
         // Hive don't check privileges for `drop function command`, what about a unverified user
         // try to drop functions.
         // We treat permanent functions as tables for verifying.
-        case "DropFunctionCommand" if !c.asInstanceOf[DropFunctionCommand].isTemp =>
+        case "DropFunctionCommand"
+          if (!AuthzUtils.getFieldVal(c, "isTemp").asInstanceOf[Boolean]) =>
           HiveOperation.DROPTABLE
-        case "DropFunctionCommand" if c.asInstanceOf[DropFunctionCommand].isTemp =>
+        case "DropFunctionCommand"
+          if (AuthzUtils.getFieldVal(c, "isTemp").asInstanceOf[Boolean]) =>
           HiveOperation.DROPFUNCTION
         case "DropTableCommand" => HiveOperation.DROPTABLE
 
